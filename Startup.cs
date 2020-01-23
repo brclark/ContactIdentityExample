@@ -12,6 +12,9 @@ using ContactManager.Data;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc.Authorization;
+using ContactManager.Authorization;
 
 namespace ContactManager
 {
@@ -30,9 +33,27 @@ namespace ContactManager
             services.AddEntityFrameworkSqlite().AddDbContext<ApplicationDbContext>(options =>
                 options.UseSqlite(Configuration.GetConnectionString("DefaultConnection")));
             services.AddDefaultIdentity<IdentityUser>(options => options.SignIn.RequireConfirmedAccount = true)
+                .AddRoles<IdentityRole>()
                 .AddEntityFrameworkStores<ApplicationDbContext>();
 
             services.AddRazorPages();
+
+            services.AddControllers(config =>
+            {
+                var policy = new AuthorizationPolicyBuilder()
+                                .RequireAuthenticatedUser()
+                                .Build();
+                config.Filters.Add(new AuthorizeFilter(policy));
+            });
+
+            //Authorization handlers.
+            services.AddScoped<IAuthorizationHandler,
+                ContactIsOwnerAuthorizationHandler>();
+            services.AddSingleton<IAuthorizationHandler,
+                ContactAdministratorsAuthorizationHandler>();
+            services.AddSingleton<IAuthorizationHandler,
+                ContactManagerAuthorizationHandler>();
+
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
