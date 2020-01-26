@@ -8,16 +8,20 @@ using Microsoft.AspNetCore.Mvc.Rendering;
 using Microsoft.EntityFrameworkCore;
 using ContactManager.Data;
 using ContactManager.Models;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Identity;
+using ContactManager.Authorization;
 
 namespace ContactManager.Pages.Contacts
 {
-    public class EditModel : PageModel
+    public class EditModel : DI_BasePageModelModel
     {
-        private readonly ContactManager.Data.ApplicationDbContext _context;
-
-        public EditModel(ContactManager.Data.ApplicationDbContext context)
+        public EditModel(
+            ApplicationDbContext context,
+            IAuthorizationService authorizationService,
+            UserManager<IdentityUser> userManager)
+             : base(context, authorizationService, userManager)
         {
-            _context = context;
         }
 
         [BindProperty]
@@ -25,51 +29,67 @@ namespace ContactManager.Pages.Contacts
 
         public async Task<IActionResult> OnGetAsync(int? id)
         {
-            if (id == null)
-            {
-                return NotFound();
-            }
-
-            Contact = await _context.Contact.FirstOrDefaultAsync(m => m.ContactId == id);
+            Contact = await Context.Contact.FirstOrDefaultAsync(
+                                                    m => m.ContactId == id);
 
             if (Contact == null)
             {
                 return NotFound();
             }
+
+            var isAuthorized = await AuthorizationService.AuthorizeAsync(
+                                                        User, Contact,
+                                                        ContactOperations.Update);
+
+            if (!isAuthorized.Succeeded)
+            {
+                return Forbid();
+            }
+
             return Page();
         }
 
-        public async Task<IActionResult> OnPostAsync()
+        public async Task<IActionResult> OnPostAsync(int id)
         {
             if (!ModelState.IsValid)
             {
                 return Page();
             }
 
-            _context.Attach(Contact).State = EntityState.Modified;
+            var contact = await Context
+                .Contact.AsNoTracking()
+                .FirstOrDefaultAsync(m => m.ContactId == id);
 
-            try
+            if (contact == null)
             {
-                await _context.SaveChangesAsync();
+                return NotFound();
             }
-            catch (DbUpdateConcurrencyException)
+
+            var isAuthorized = await AuthorizationService.AuthorizeAsync(
+                                                    User, Contact,
+                                                    ContactOperations.Update);
+
+            if (!isAuthorized.Succeeded)
             {
-                if (!ContactExists(Contact.ContactId))
+                return Forbid();
+            }
+
+
+            if (Contact.Status == ContactStatus.Approved)
+            {
+                var canApprove = await AuthorizationService.AuthorizeAsync(User,
+                                        Contact,
+                                        ContactOperations.Approve);
+
+                if (!canApprove.Succeeded)
                 {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
+                    Contact.Status = ContactStatus.Submitted;
                 }
             }
+
+            await Context.SaveChangesAsync();
 
             return RedirectToPage("./Index");
-        }
-
-        private bool ContactExists(int id)
-        {
-            return _context.Contact.Any(e => e.ContactId == id);
         }
     }
 }

@@ -24,6 +24,13 @@ namespace ContactManager.Data
                 var managerID = await EnsureUser(serviceProvider, testUserPw, "manager@contoso.com");
                 await EnsureRole(serviceProvider, managerID, Constants.ContactManagersRole);
 
+                await serviceProvider.GetService<UserManager<IdentityUser>>().CreateAsync(
+                    new IdentityUser
+                    {
+                        UserName = "gary@gary.com",
+                        EmailConfirmed = true
+                    }, "Gary123!");
+
                 SeedDB(context, adminID);
             }
         }
